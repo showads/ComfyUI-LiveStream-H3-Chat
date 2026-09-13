@@ -119,7 +119,9 @@ def register_routes():
 
     @routes.get("/live-h3-chat/director-patch.js")
     async def live_h3_chat_director_js(_request):
-        return web.FileResponse(WEB_DIR / "director-patch.js")
+        runtime = (WEB_DIR / "director-patch.js").read_text(encoding="utf-8")
+        fixes = (WEB_DIR / "runtime-fixes.js").read_text(encoding="utf-8")
+        return web.Response(text=f"{runtime}\n\n{fixes}\n", content_type="application/javascript")
 
     @routes.get("/live-h3-chat/styles.css")
     async def live_h3_chat_css(_request):
