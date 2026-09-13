@@ -26,9 +26,9 @@
           <video id="playerB" playsinline autoplay muted></video>
           <div id="stageEmpty" class="stage-empty">
             <div class="stage-empty-title">No live scene yet</div>
-            <div>Open Setup, choose a reference image and API workflow, then prefill the buffer.</div>
+            <div>Open Setup, choose the canonical frame and API workflow, then prefill the buffer.</div>
           </div>
-          <div id="bufferBadge" class="buffer-badge">0 buffered</div>
+          <div id="bufferBadge" class="buffer-badge">0.0s buffered</div>
         </div>
 
         <div class="controls-row">
@@ -40,9 +40,11 @@
 
         <div class="metrics-grid">
           <div><span>Playing</span><strong id="playingMetric">—</strong></div>
-          <div><span>Queued</span><strong id="queuedMetric">0</strong></div>
+          <div><span>Buffered</span><strong id="queuedMetric">0.0s</strong></div>
           <div><span>Generating</span><strong id="generatingMetric">No</strong></div>
           <div><span>Last gen</span><strong id="lastGenMetric">—</strong></div>
+          <div><span>Chain depth</span><strong id="chainMetric">0</strong></div>
+          <div><span>Continuity frame</span><strong id="continuityMetric">canonical</strong></div>
         </div>
       </section>
 
@@ -61,6 +63,43 @@
         </form>
       </aside>
     </main>
+
+    <section class="diagnostics-panel">
+      <div class="diagnostics-head">
+        <div>
+          <div class="eyebrow">Observability</div>
+          <h2>Segment diagnostics</h2>
+        </div>
+        <div class="controls-row compact">
+          <button id="clearDiagnosticsBtn" class="ghost">Clear diagnostics</button>
+        </div>
+      </div>
+      <div class="diagnostics-table-wrap">
+        <table class="diagnostics-table">
+          <thead>
+            <tr>
+              <th>#</th><th>Type</th><th>Anchor</th><th>Requested</th><th>Actual</th>
+              <th>LLM</th><th>Total</th><th>Output</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="diagnosticsRows">
+            <tr class="diagnostics-empty"><td colspan="10">No generated segments yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="diagnosticsDetail" class="diagnostics-detail hidden">
+        <div class="diagnostics-detail-head">
+          <div><strong id="detailTitle">Segment</strong><div id="detailMeta" class="small mono"></div></div>
+          <button id="closeDiagnosticsDetail" class="ghost">Close</button>
+        </div>
+        <div class="trace-grid">
+          <div><div class="trace-label">Director input</div><pre id="detailDirectorInput"></pre></div>
+          <div><div class="trace-label">LLM output</div><pre id="detailLlmOutput"></pre></div>
+          <div class="trace-wide"><div class="trace-label">Final H3 prompt</div><pre id="detailH3Prompt"></pre></div>
+          <div class="trace-wide"><div class="trace-label">Continuity / media</div><pre id="detailContinuity"></pre></div>
+        </div>
+      </div>
+    </section>
   </div>
 
   <dialog id="setupDialog">
@@ -73,25 +112,20 @@
         <button class="ghost" value="cancel">Close</button>
       </div>
 
-      <div class="setup-grid">
-        <label>
-          <span>Scene name</span>
-          <input id="sceneName" placeholder="Late Night News Desk" />
-        </label>
-        <label>
-          <span>Initial buffer segments</span>
-          <input id="initialBuffer" type="number" min="1" max="10" value="3" />
-        </label>
-        <label>
-          <span>Target buffer segments</span>
-          <input id="targetBuffer" type="number" min="1" max="10" value="3" />
-        </label>
-        <label>
-          <span>History turns in prompt</span>
-          <input id="historyTurns" type="number" min="0" max="20" value="4" />
-        </label>
+      <div class="section-head"><div><div class="eyebrow">Temporal control</div><h3>Buffer + clip duration</h3></div></div>
+      <div class="setup-grid temporal-grid">
+        <label><span>Scene name</span><input id="sceneName" placeholder="Late Night News Desk" /></label>
+        <label><span>History turns in director prompt</span><input id="historyTurns" type="number" min="0" max="20" value="4" /></label>
+        <label><span>Initial buffer (seconds)</span><input id="initialBufferSeconds" type="number" min="0" max="60" step="0.5" value="10" /></label>
+        <label><span>Target buffer (seconds)</span><input id="targetBufferSeconds" type="number" min="0" max="60" step="0.5" value="12" /></label>
+        <label><span>Idle desired duration (seconds)</span><input id="idleSeconds" type="number" min="1" max="30" step="0.1" value="5.2" /></label>
+        <label><span>Chat desired duration (seconds)</span><input id="chatSeconds" type="number" min="1" max="30" step="0.1" value="7.3" /></label>
+        <label><span>Reset desired duration (seconds)</span><input id="resetSeconds" type="number" min="1" max="30" step="0.1" value="5.2" /></label>
+        <label><span>Reset after chained clips (0 = off)</span><input id="reanchorEvery" type="number" min="0" max="100" step="1" value="4" /></label>
       </div>
+      <p class="small mono temporal-note">H3 runs at 24 fps and native local conditioning snaps frame counts upward to the model's 17k+5 grid. The app converts desired seconds to an aligned frame count and shows requested vs actual output timing below.</p>
 
+      <div class="divider"></div>
       <label class="full">
         <span>Base scene prompt</span>
         <textarea id="basePrompt" rows="5" placeholder="Locked camera. Same studio, same subject, subtle natural motion…"></textarea>
@@ -99,21 +133,21 @@
 
       <label class="full">
         <span>Idle segment template</span>
-        <textarea id="idleTemplate" rows="4">{base_prompt}\ndetailed_description
-Continue the scene naturally. Keep camera, identity, wardrobe, lighting and set consistent. The subject remains engaged and makes subtle natural movements. Avoid improvised speech unless the prompt contains explicit dialogue.</textarea>
+        <textarea id="idleTemplate" rows="5">{base_prompt}\ndetailed_description
+Continue the scene naturally from the supplied first frame. Keep camera, identity, wardrobe, lighting and set consistent. The subject remains engaged and makes subtle natural movements. No spoken dialogue occurs unless explicit dialogue is present in this prompt.</textarea>
       </label>
 
       <label class="full">
         <span>Direct chat-response template (fallback when no LLM director is configured)</span>
         <textarea id="chatTemplate" rows="6">{base_prompt}\ndetailed_description
-Continue the same scene with strong visual continuity. A viewer says: "{chat_message}"\nThe subject acknowledges the viewer and responds naturally on-camera. Preserve identity, set, framing, lighting and wardrobe. Keep the response concise enough for one segment.\nRecent chat context:\n{chat_history}</textarea>
+Continue the same scene from the supplied first frame with strong visual continuity. A viewer says: "{chat_message}"\nThe subject acknowledges the viewer and responds naturally on-camera. Preserve identity, set, framing, lighting and wardrobe. Keep the response concise enough for one segment.\nRecent chat context:\n{chat_history}</textarea>
       </label>
 
       <label class="full">
         <span>LLM director template (optional; used only for chat clips)</span>
-        <textarea id="directorTemplate" rows="9">You are writing the next prompt for a MiniMax H3 video segment in an ongoing continuous scene.
+        <textarea id="directorTemplate" rows="10">You are writing the next MiniMax H3 FL2VA prompt for an ongoing continuous scene.
 
-Preserve the supplied scene definition exactly. Write explicit, literal spoken dialogue for the on-screen subject rather than asking the video model to invent speech. Keep the dialogue short enough to fit one segment. Return only the final video prompt, with no commentary.
+The supplied first frame is the exact visual starting state. If a last frame is supplied, the shot must converge naturally to it by the end. Preserve the scene definition. Write explicit, literal spoken dialogue for the on-screen subject rather than asking the video model to invent speech. Keep dialogue short enough for the requested segment duration. Return only the final video prompt, with no commentary.
 
 Viewer message: "{chat_message}"
 
@@ -126,19 +160,16 @@ Scene definition:
 
       <div class="upload-row">
         <label class="file-label">
-          <span>Reference image</span>
+          <span>Canonical / reset image</span>
           <input id="referenceFile" type="file" accept="image/*" />
         </label>
         <div id="referenceName" class="mono small">No image uploaded</div>
       </div>
+      <p class="small mono">FL continuity: the first generated clip starts from this image. Each following clip starts from the extracted final frame of the preceding clip. A reset clip starts from the current chain frame and uses this canonical image as its optional last-frame target.</p>
 
       <div class="divider"></div>
-
       <div class="section-head">
-        <div>
-          <div class="eyebrow">ComfyUI API workflow</div>
-          <h3>Workflow + mappings</h3>
-        </div>
+        <div><div class="eyebrow">ComfyUI API workflow</div><h3>Workflow + mappings</h3></div>
       </div>
 
       <label class="full">
@@ -147,23 +178,41 @@ Scene definition:
       </label>
 
       <div class="setup-grid mapping-grid">
-        <label><span>H3 prompt node ID</span><input id="promptNodeId" placeholder="12" /></label>
-        <label><span>H3 prompt input</span><input id="promptInput" value="text" /></label>
+        <label><span>H3 prompt / FL node ID</span><input id="promptNodeId" placeholder="12" /></label>
+        <label><span>H3 prompt input</span><input id="promptInput" value="prompt" /></label>
         <label><span>LLM director node ID (optional)</span><input id="directorNodeId" placeholder="40" /></label>
         <label><span>LLM director text input</span><input id="directorInput" value="text" /></label>
-        <label><span>Reference image node ID</span><input id="imageNodeId" placeholder="5" /></label>
-        <label><span>Reference image input</span><input id="imageInput" value="image" /></label>
+
+        <label><span>LLM input trace node ID (optional)</span><input id="llmInputTraceNodeId" placeholder="41" /></label>
+        <label><span>LLM output trace node ID (recommended)</span><input id="llmOutputTraceNodeId" placeholder="42" /></label>
+        <label><span>Final H3 prompt trace node ID (recommended)</span><input id="finalPromptTraceNodeId" placeholder="43" /></label>
+        <label><span>Trace text input</span><input id="traceInput" value="text" /></label>
+
+        <label><span>First-frame Load Image node ID</span><input id="firstFrameNodeId" placeholder="5" /></label>
+        <label><span>First-frame filename input</span><input id="firstFrameInput" value="image" /></label>
+        <label><span>Last-frame Load Image node ID</span><input id="lastFrameNodeId" placeholder="6" /></label>
+        <label><span>Last-frame filename input</span><input id="lastFrameInput" value="image" /></label>
+        <label><span>FL target node ID (defaults to H3 node)</span><input id="flNodeId" placeholder="12" /></label>
+        <label><span>Optional last-frame input</span><input id="lastFrameTargetInput" value="last_frame" /></label>
+
+        <label><span>Frame-count node ID (defaults to H3 node)</span><input id="lengthNodeId" placeholder="12" /></label>
+        <label><span>Frame-count input</span><input id="lengthInput" value="length" /></label>
         <label><span>Seed node ID (optional)</span><input id="seedNodeId" placeholder="23" /></label>
         <label><span>Seed input</span><input id="seedInput" value="seed" /></label>
-        <label><span>Output node ID</span><input id="outputNodeId" placeholder="30" /></label>
+        <label><span>Output video node ID</span><input id="outputNodeId" placeholder="30" /></label>
         <label><span>Preferred output key</span><input id="outputKey" value="videos" /></label>
       </div>
 
-      <p class="small mono">Director mode: wire the LLM/director output (optionally through text-formatting nodes) into the H3 prompt input in ComfyUI before exporting the API workflow. Idle clips bypass that chain; chat clips preserve it and replace only the director node's text input.</p>
+      <div class="workflow-help small mono">
+        <strong>Recommended trace wiring:</strong><br />
+        app → Live H3 Trace Text [director input] → LLM → Live H3 Trace Text [LLM output] → optional formatter/concat → Live H3 Trace Text [final H3 prompt] → H3 prompt.<br /><br />
+        <strong>Recommended FL wiring:</strong><br />
+        Load Image [first] → H3 first_frame. Load Image [last] → H3 last_frame. Export with both connected; the app removes last_frame on ordinary clips and restores that exported connection only on reset clips.
+      </div>
 
       <label class="full">
         <span>Static input overrides (optional JSON)</span>
-        <textarea id="staticOverrides" class="mono" rows="5" placeholder='{"14":{"frames":192},"18":{"filename_prefix":"live_h3/segment"}}'></textarea>
+        <textarea id="staticOverrides" class="mono" rows="5" placeholder='{"18":{"filename_prefix":"live_h3/segment"}}'></textarea>
       </label>
 
       <div class="dialog-actions">
