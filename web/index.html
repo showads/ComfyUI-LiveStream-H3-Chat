@@ -99,12 +99,29 @@
 
       <label class="full">
         <span>Idle segment template</span>
-        <textarea id="idleTemplate" rows="4">{base_prompt}\nContinue the scene naturally. Keep camera, identity, wardrobe, lighting and set consistent. The subject remains engaged and makes subtle natural movements. If speaking, keep it brief and conversational.</textarea>
+        <textarea id="idleTemplate" rows="4">{base_prompt}\ndetailed_description
+Continue the scene naturally. Keep camera, identity, wardrobe, lighting and set consistent. The subject remains engaged and makes subtle natural movements. Avoid improvised speech unless the prompt contains explicit dialogue.</textarea>
       </label>
 
       <label class="full">
-        <span>Chat-response template</span>
-        <textarea id="chatTemplate" rows="6">{base_prompt}\nContinue the same scene with strong visual continuity. A viewer says: "{chat_message}"\nThe subject acknowledges the viewer and responds naturally on-camera. Preserve identity, set, framing, lighting and wardrobe. Keep the response concise enough for one segment.\nRecent chat context:\n{chat_history}</textarea>
+        <span>Direct chat-response template (fallback when no LLM director is configured)</span>
+        <textarea id="chatTemplate" rows="6">{base_prompt}\ndetailed_description
+Continue the same scene with strong visual continuity. A viewer says: "{chat_message}"\nThe subject acknowledges the viewer and responds naturally on-camera. Preserve identity, set, framing, lighting and wardrobe. Keep the response concise enough for one segment.\nRecent chat context:\n{chat_history}</textarea>
+      </label>
+
+      <label class="full">
+        <span>LLM director template (optional; used only for chat clips)</span>
+        <textarea id="directorTemplate" rows="9">You are writing the next prompt for a MiniMax H3 video segment in an ongoing continuous scene.
+
+Preserve the supplied scene definition exactly. Write explicit, literal spoken dialogue for the on-screen subject rather than asking the video model to invent speech. Keep the dialogue short enough to fit one segment. Return only the final video prompt, with no commentary.
+
+Viewer message: "{chat_message}"
+
+Recent chat context:
+{chat_history}
+
+Scene definition:
+{base_prompt}</textarea>
       </label>
 
       <div class="upload-row">
@@ -130,8 +147,10 @@
       </label>
 
       <div class="setup-grid mapping-grid">
-        <label><span>Prompt node ID</span><input id="promptNodeId" placeholder="12" /></label>
-        <label><span>Prompt input</span><input id="promptInput" value="text" /></label>
+        <label><span>H3 prompt node ID</span><input id="promptNodeId" placeholder="12" /></label>
+        <label><span>H3 prompt input</span><input id="promptInput" value="text" /></label>
+        <label><span>LLM director node ID (optional)</span><input id="directorNodeId" placeholder="40" /></label>
+        <label><span>LLM director text input</span><input id="directorInput" value="text" /></label>
         <label><span>Reference image node ID</span><input id="imageNodeId" placeholder="5" /></label>
         <label><span>Reference image input</span><input id="imageInput" value="image" /></label>
         <label><span>Seed node ID (optional)</span><input id="seedNodeId" placeholder="23" /></label>
@@ -139,6 +158,8 @@
         <label><span>Output node ID</span><input id="outputNodeId" placeholder="30" /></label>
         <label><span>Preferred output key</span><input id="outputKey" value="videos" /></label>
       </div>
+
+      <p class="small mono">Director mode: wire the LLM/director output (optionally through text-formatting nodes) into the H3 prompt input in ComfyUI before exporting the API workflow. Idle clips bypass that chain; chat clips preserve it and replace only the director node's text input.</p>
 
       <label class="full">
         <span>Static input overrides (optional JSON)</span>
@@ -152,5 +173,6 @@
   </dialog>
 
   <script src="/live-h3-chat/app.js"></script>
+  <script src="/live-h3-chat/director-patch.js"></script>
 </body>
 </html>
