@@ -1,5 +1,4 @@
 import json
-import shutil
 from pathlib import Path
 
 from aiohttp import web
@@ -37,6 +36,10 @@ def register_routes():
     @routes.get("/live-h3-chat/app.js")
     async def live_h3_chat_js(_request):
         return web.FileResponse(WEB_DIR / "app.js")
+
+    @routes.get("/live-h3-chat/director-patch.js")
+    async def live_h3_chat_director_js(_request):
+        return web.FileResponse(WEB_DIR / "director-patch.js")
 
     @routes.get("/live-h3-chat/styles.css")
     async def live_h3_chat_css(_request):
