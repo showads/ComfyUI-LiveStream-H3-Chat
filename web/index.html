@@ -79,11 +79,11 @@
           <thead>
             <tr>
               <th>#</th><th>Type</th><th>Anchor</th><th>Requested</th><th>Actual</th>
-              <th>LLM</th><th>Total</th><th>Output</th><th>Status</th><th></th>
+              <th>LLM</th><th>H3+</th><th>Total</th><th>Output</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody id="diagnosticsRows">
-            <tr class="diagnostics-empty"><td colspan="10">No generated segments yet.</td></tr>
+            <tr class="diagnostics-empty"><td colspan="11">No generated segments yet.</td></tr>
           </tbody>
         </table>
       </div>
@@ -220,6 +220,15 @@ Scene definition:
       </div>
     </form>
   </dialog>
+
+  <!-- app.js v1 expects these IDs during its initial config load. v2 keeps them
+       hidden so existing saved setups migrate cleanly before the runtime patch loads. -->
+  <div hidden aria-hidden="true">
+    <input id="initialBuffer" value="2" />
+    <input id="targetBuffer" value="3" />
+    <input id="imageNodeId" value="" />
+    <input id="imageInput" value="image" />
+  </div>
 
   <script src="/live-h3-chat/app.js"></script>
   <script src="/live-h3-chat/director-patch.js"></script>
