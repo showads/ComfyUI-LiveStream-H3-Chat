@@ -118,9 +118,9 @@
         <label><span>History turns in director prompt</span><input id="historyTurns" type="number" min="0" max="20" value="4" /></label>
         <label><span>Initial buffer (seconds)</span><input id="initialBufferSeconds" type="number" min="0" max="60" step="0.5" value="10" /></label>
         <label><span>Target buffer (seconds)</span><input id="targetBufferSeconds" type="number" min="0" max="60" step="0.5" value="12" /></label>
-        <label><span>Idle desired duration (seconds)</span><input id="idleSeconds" type="number" min="1" max="30" step="0.1" value="5.2" /></label>
+        <label><span>Idle desired duration (seconds)</span><input id="idleSeconds" type="number" min="1" max="30" step="0.1" value="5.0" /></label>
         <label><span>Chat desired duration (seconds)</span><input id="chatSeconds" type="number" min="1" max="30" step="0.1" value="7.3" /></label>
-        <label><span>Reset desired duration (seconds)</span><input id="resetSeconds" type="number" min="1" max="30" step="0.1" value="5.2" /></label>
+        <label><span>Reset desired duration (seconds)</span><input id="resetSeconds" type="number" min="1" max="30" step="0.1" value="5.0" /></label>
         <label><span>Reset after chained clips (0 = off)</span><input id="reanchorEvery" type="number" min="0" max="100" step="1" value="4" /></label>
       </div>
       <p class="small mono temporal-note">H3 runs at 24 fps and native local conditioning snaps frame counts upward to the model's 17k+5 grid. The app converts desired seconds to an aligned frame count and shows requested vs actual output timing below.</p>
@@ -145,9 +145,15 @@ Continue the same scene from the supplied first frame with strong visual continu
 
       <label class="full">
         <span>LLM director template (optional; used only for chat clips)</span>
-        <textarea id="directorTemplate" rows="10">You are writing the next MiniMax H3 FL2VA prompt for an ongoing continuous scene.
+        <textarea id="directorTemplate" rows="13">You are writing the next MiniMax H3 FL2VA prompt for an ongoing continuous scene.
 
-The supplied first frame is the exact visual starting state. If a last frame is supplied, the shot must converge naturally to it by the end. Preserve the scene definition. Write explicit, literal spoken dialogue for the on-screen subject rather than asking the video model to invent speech. Keep dialogue short enough for the requested segment duration. Return only the final video prompt, with no commentary.
+TEMPORAL BUDGET:
+- This clip will be exactly {segment_seconds} seconds long at 24 fps.
+- H3 will generate {segment_frames} frames.
+- All dialogue and visible action must comfortably fit inside that duration.
+- Prefer a complete concise response with a brief natural pause at the end rather than dialogue that runs all the way to the final frame.
+
+The supplied first frame is the exact visual starting state. If a last frame is supplied, the shot must converge naturally to it by the end. Preserve the scene definition. Write explicit, literal spoken dialogue for the on-screen subject rather than asking the video model to invent speech. Return only the final video prompt, with no commentary.
 
 Viewer message: "{chat_message}"
 
@@ -157,6 +163,7 @@ Recent chat context:
 Scene definition:
 {base_prompt}</textarea>
       </label>
+      <p class="small mono">Director template variables include <code>{segment_seconds}</code>, <code>{segment_frames}</code>, <code>{is_reset}</code>, and <code>{reset_instruction}</code>. The duration values are the actual H3-aligned temporal budget, not the raw requested seconds.</p>
 
       <div class="upload-row">
         <label class="file-label">
