@@ -203,24 +203,16 @@ def register_routes():
             target_name = f"last_{int(time.time() * 1000)}.png"
             target = target_dir / target_name
 
-            duration = probe.get("duration") if probe.get("available") else None
-            fps = probe.get("fps") if probe.get("available") else None
-            if duration:
-                # Seek just inside the final decoded frame. Using -ss after -i is
-                # slower but frame-accurate enough for these short clips.
-                frame_dt = 1.0 / fps if fps else 1.0 / 24.0
-                seek = max(0.0, float(duration) - frame_dt * 0.55)
-                cmd = [
-                    "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-                    "-i", str(source), "-ss", f"{seek:.6f}",
-                    "-frames:v", "1", str(target),
-                ]
-            else:
-                cmd = [
-                    "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-                    "-sseof", "-0.10", "-i", str(source),
-                    "-frames:v", "1", str(target),
-                ]
+            # Decode only the final second of the clip, reverse those decoded
+            # video frames, then take the first reversed frame. This produces the
+            # actual terminal decoded frame instead of estimating its timestamp
+            # from container duration (which can otherwise land one frame early).
+            cmd = [
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                "-sseof", "-1.0", "-i", str(source),
+                "-an", "-vf", "reverse",
+                "-frames:v", "1", str(target),
+            ]
 
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
             if proc.returncode != 0 or not target.exists():
