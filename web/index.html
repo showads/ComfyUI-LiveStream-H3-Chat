@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Live H3 Chat</title>
+  <link rel="stylesheet" href="/live-h3-chat/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">ComfyUI continuous-scene playground</div>
+        <h1>Live H3 Chat</h1>
+      </div>
+      <div class="status-row">
+        <span id="statusDot" class="status-dot idle"></span>
+        <span id="statusText">Idle</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="stage-panel">
+        <div class="video-wrap">
+          <video id="playerA" playsinline autoplay muted></video>
+          <video id="playerB" playsinline autoplay muted></video>
+          <div id="stageEmpty" class="stage-empty">
+            <div class="stage-empty-title">No live scene yet</div>
+            <div>Open Setup, choose a reference image and API workflow, then prefill the buffer.</div>
+          </div>
+          <div id="bufferBadge" class="buffer-badge">0 buffered</div>
+        </div>
+
+        <div class="controls-row">
+          <button id="startBtn" class="primary">Start / Prefill</button>
+          <button id="stopBtn">Stop</button>
+          <button id="muteBtn">Unmute</button>
+          <button id="setupBtn">Setup</button>
+        </div>
+
+        <div class="metrics-grid">
+          <div><span>Playing</span><strong id="playingMetric">—</strong></div>
+          <div><span>Queued</span><strong id="queuedMetric">0</strong></div>
+          <div><span>Generating</span><strong id="generatingMetric">No</strong></div>
+          <div><span>Last gen</span><strong id="lastGenMetric">—</strong></div>
+        </div>
+      </section>
+
+      <aside class="chat-panel">
+        <div class="chat-head">
+          <div>
+            <div class="eyebrow">Director input</div>
+            <h2>Live chat</h2>
+          </div>
+          <button id="clearChatBtn" class="ghost">Clear</button>
+        </div>
+        <div id="chatLog" class="chat-log"></div>
+        <form id="chatForm" class="chat-form">
+          <textarea id="chatInput" rows="3" placeholder="Ask the character something or steer the scene…"></textarea>
+          <button class="primary" type="submit">Send</button>
+        </form>
+      </aside>
+    </main>
+  </div>
+
+  <dialog id="setupDialog">
+    <form method="dialog" class="setup-card" id="setupForm">
+      <div class="dialog-head">
+        <div>
+          <div class="eyebrow">Scene configuration</div>
+          <h2>Setup</h2>
+        </div>
+        <button class="ghost" value="cancel">Close</button>
+      </div>
+
+      <div class="setup-grid">
+        <label>
+          <span>Scene name</span>
+          <input id="sceneName" placeholder="Late Night News Desk" />
+        </label>
+        <label>
+          <span>Initial buffer segments</span>
+          <input id="initialBuffer" type="number" min="1" max="10" value="3" />
+        </label>
+        <label>
+          <span>Target buffer segments</span>
+          <input id="targetBuffer" type="number" min="1" max="10" value="3" />
+        </label>
+        <label>
+          <span>History turns in prompt</span>
+          <input id="historyTurns" type="number" min="0" max="20" value="4" />
+        </label>
+      </div>
+
+      <label class="full">
+        <span>Base scene prompt</span>
+        <textarea id="basePrompt" rows="5" placeholder="Locked camera. Same studio, same subject, subtle natural motion…"></textarea>
+      </label>
+
+      <label class="full">
+        <span>Idle segment template</span>
+        <textarea id="idleTemplate" rows="4">{base_prompt}\nContinue the scene naturally. Keep camera, identity, wardrobe, lighting and set consistent. The subject remains engaged and makes subtle natural movements. If speaking, keep it brief and conversational.</textarea>
+      </label>
+
+      <label class="full">
+        <span>Chat-response template</span>
+        <textarea id="chatTemplate" rows="6">{base_prompt}\nContinue the same scene with strong visual continuity. A viewer says: "{chat_message}"\nThe subject acknowledges the viewer and responds naturally on-camera. Preserve identity, set, framing, lighting and wardrobe. Keep the response concise enough for one segment.\nRecent chat context:\n{chat_history}</textarea>
+      </label>
+
+      <div class="upload-row">
+        <label class="file-label">
+          <span>Reference image</span>
+          <input id="referenceFile" type="file" accept="image/*" />
+        </label>
+        <div id="referenceName" class="mono small">No image uploaded</div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">ComfyUI API workflow</div>
+          <h3>Workflow + mappings</h3>
+        </div>
+      </div>
+
+      <label class="full">
+        <span>API workflow JSON</span>
+        <textarea id="workflowJson" class="mono" rows="12" placeholder="Paste Workflow → Export (API) JSON here"></textarea>
+      </label>
+
+      <div class="setup-grid mapping-grid">
+        <label><span>Prompt node ID</span><input id="promptNodeId" placeholder="12" /></label>
+        <label><span>Prompt input</span><input id="promptInput" value="text" /></label>
+        <label><span>Reference image node ID</span><input id="imageNodeId" placeholder="5" /></label>
+        <label><span>Reference image input</span><input id="imageInput" value="image" /></label>
+        <label><span>Seed node ID (optional)</span><input id="seedNodeId" placeholder="23" /></label>
+        <label><span>Seed input</span><input id="seedInput" value="seed" /></label>
+        <label><span>Output node ID</span><input id="outputNodeId" placeholder="30" /></label>
+        <label><span>Preferred output key</span><input id="outputKey" value="videos" /></label>
+      </div>
+
+      <label class="full">
+        <span>Static input overrides (optional JSON)</span>
+        <textarea id="staticOverrides" class="mono" rows="5" placeholder='{"14":{"frames":192},"18":{"filename_prefix":"live_h3/segment"}}'></textarea>
+      </label>
+
+      <div class="dialog-actions">
+        <button id="saveSetupBtn" class="primary" value="default">Save setup</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/live-h3-chat/app.js"></script>
+</body>
+</html>
