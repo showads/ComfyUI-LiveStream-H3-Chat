@@ -1,19 +1,23 @@
 # ComfyUI Live H3 Chat
 
-A standalone ComfyUI web app for building a continuously generated video scene that can react to live text input.
+A standalone ComfyUI web app for continuously generated MiniMax H3 video/audio scenes that react to live text input.
 
-The first target is an AI presenter / news-anchor setup, but the app is deliberately workflow-agnostic: any ComfyUI API workflow that accepts a text prompt and produces a playable media file can be mapped into the controller.
+The first target is an AI presenter / news-anchor setup, but the controller is scene-agnostic. The current runtime is optimized around **MiniMax H3 FL2VA**: one canonical setup image starts the scene, every generated clip hands its final frame to the next clip, and periodic reset clips converge back to the canonical image without changing H3 model families.
 
 ## What it does
 
 - Adds a standalone UI at `/live-h3-chat/` on the same host/port as ComfyUI.
-- Stores a reusable **scene setup**: reference image, base prompt, idle prompt template, chat-response template, API workflow, and workflow-node mappings.
-- Prefills an initial segment buffer before playback starts.
-- Plays generated segments continuously in the browser.
-- Keeps generating in the background to maintain a target buffer.
-- Accepts live text input and injects queued messages into upcoming segment prompts.
-- Uses two alternating `<video>` elements so the next segment can preload while the current one plays.
-- Works through ComfyUI's normal `/prompt`, `/history`, and `/view` APIs. The extension itself does not load or own the H3 model.
+- Stores scene prompts, a canonical/reset image, API workflow JSON, temporal settings, and node mappings.
+- Prefills and maintains the playback buffer in **seconds**, not segment count.
+- Uses the previous generated clip's final frame as the next FL2VA first frame.
+- Periodically performs a **continuity reset** using:
+  - first frame = previous clip's actual final frame
+  - last frame = the original canonical/setup image
+- Accepts live chat and prioritizes it without reordering an already-generated FL chain. Unplayed idle future clips are flushed when chat needs to preempt them.
+- Supports an in-workflow LLM director for literal dialogue generation.
+- Includes a `Live H3 Trace Text` ComfyUI node for exact prompt capture and timing diagnostics.
+- Probes generated media with `ffprobe` when available and extracts the final video frame with `ffmpeg` for the next generation.
+- Uses two alternating browser video elements so the next segment can preload.
 
 ## Installation
 
@@ -22,148 +26,268 @@ cd /workspace/ComfyUI/custom_nodes
 git clone https://github.com/showads/ComfyUI-LiveStream-H3-Chat.git
 ```
 
-Restart ComfyUI, then open:
+For an existing clone:
+
+```bash
+cd /workspace/ComfyUI/custom_nodes/ComfyUI-LiveStream-H3-Chat
+git pull
+```
+
+Restart ComfyUI after installing/updating, then open:
 
 ```text
 http://YOUR-COMFY-HOST:8188/live-h3-chat/
 ```
 
-If you expose ComfyUI through RunPod's proxy, use the same proxied ComfyUI URL and append `/live-h3-chat/`.
+If you use RunPod's ComfyUI proxy, append `/live-h3-chat/` to the same proxied URL.
 
-There are no additional Python dependencies beyond ComfyUI/aiohttp.
+The app itself has no pip dependencies beyond ComfyUI/aiohttp. `ffmpeg` + `ffprobe` are strongly recommended for continuity extraction and media diagnostics; most ComfyUI video environments already include them.
 
-## Recommended first experiment
+---
 
-Start with a constrained scene:
+## Recommended H3 graph
 
-- one person
-- seated or mostly stationary
-- locked camera
-- fixed lighting and wardrobe
-- one consistent set
-- subtle idle movement
-- short spoken responses
+Use a local **H3 FL2VA / Image-to-Video** workflow with both first and last frame inputs available in the exported API graph.
 
-A news anchor at a desk is ideal.
-
-### Base prompt example
+Conceptually:
 
 ```text
-A single presenter is seated behind a modern news desk in the same studio. Locked medium camera shot. The camera never moves. The presenter, wardrobe, desk, studio background and lighting remain visually identical between segments. Natural breathing, blinking and restrained hand gestures. Professional but conversational delivery.
+Load Image [dynamic first] ───────────────► H3 first_frame
+
+Load Image [canonical reset image] ──────► H3 last_frame
+                                             ▲
+                                             │
+                                    app removes this input
+                                    on normal chain clips;
+                                    restores it on reset clips
 ```
 
-The setup screen then wraps that base prompt in separate templates for idle segments and chat-response segments.
+For ordinary clips the app deletes the optional `last_frame` input from the API prompt, so H3 runs from only the first frame.
 
-## Setup flow
-
-### 1. Build and test the video workflow in normal ComfyUI
-
-Use whichever H3/LTX/etc workflow you want. Confirm that it successfully saves a video with `SaveVideo` (or another output node that returns a file record in ComfyUI history).
-
-### 2. Export the workflow in API format
-
-In ComfyUI use the API workflow export, then paste the resulting JSON into **API workflow JSON** in the app.
-
-Do **not** paste the normal UI workflow JSON; `/prompt` needs the API-prompt shape with numeric node IDs as keys.
-
-### 3. Map dynamic inputs
-
-The app needs to know which workflow fields it may replace before every segment:
-
-- **Prompt node ID / input** — required. Example: node `12`, input `text`.
-- **Reference image node ID / input** — optional. Usually a `LoadImage` node with input `image`.
-- **Seed node ID / input** — optional. A new random seed is injected per segment.
-- **Output node ID / preferred output key** — required. Usually a video-saving node and `videos`.
-
-You can also provide arbitrary **Static input overrides** as JSON. These are useful for frame count, resolution, filename prefix, sampler settings, etc.
-
-Example:
-
-```json
-{
-  "14": {
-    "frames": 192
-  },
-  "31": {
-    "filename_prefix": "live_h3/segment"
-  }
-}
-```
-
-### 4. Choose the reference image
-
-The app uploads the selected image into:
+For a reset clip the app restores the exported `last_frame` connection:
 
 ```text
-ComfyUI/input/live_h3_chat/
+previous actual final frame
+          │
+          ▼
+     first_frame
+          │
+        H3 FL
+          │
+      last_frame
+          ▲
+          │
+original canonical image
 ```
 
-and inserts that filename into the mapped workflow input on every generated segment.
+The reset therefore remains one continuous H3 FL generation instead of switching to Ref2VA or another model partition.
 
-Whether this actually conditions the generated video depends entirely on the workflow/model you provide.
+---
 
-### 5. Configure the buffer
+## LLM director + observability wiring
 
-**Initial buffer segments** are generated before playback starts. This is intentionally the startup delay that buys the app enough runway to keep playback continuous.
+This extension adds a pass-through ComfyUI node named:
 
-**Target buffer segments** is how many completed clips the app tries to keep waiting ahead of the currently playing clip.
+```text
+Live H3 Trace Text
+```
 
-For early testing, `3 / 3` is a reasonable starting point.
+Recommended graph:
+
+```text
+app director prompt
+       │
+       ▼
+Live H3 Trace Text        label: director_input
+       │
+       ▼
+      LLM
+       │
+       ▼
+Live H3 Trace Text        label: llm_output
+       │
+       ▼
+optional formatter / concat
+       │
+       ▼
+Live H3 Trace Text        label: final_h3_prompt
+       │
+       ▼
+ H3 prompt input
+```
+
+Each trace node returns the input string unchanged, while also writing a timestamped diagnostic record into ComfyUI history.
+
+With all three configured, the app can display:
+
+- exact director input sent toward the LLM
+- exact LLM output
+- exact final text entering H3
+- measured LLM time (input trace → output trace)
+- H3/downstream time (final prompt trace → workflow completion)
+- total Comfy workflow time
+- requested frame count / duration
+- probed output frame count / fps / duration / file size
+- first frame used for the segment
+- extracted final frame used for continuity
+- whether the segment was a canonical reset
+- whether a generated idle clip was discarded because live chat preempted its future chain
+
+The diagnostics table keeps the latest 100 rows in the browser session. Click **Details** on a row to inspect all text and continuity metadata.
+
+---
+
+## Temporal behavior: H3's 17k+5 frame grid
+
+The current native local H3 conditioning in ComfyUI runs at **24 fps** and aligns requested length upward until:
+
+```text
+frame_count % 17 == 5
+```
+
+The app therefore accepts desired durations in seconds but converts them to an H3-valid frame count before submitting the workflow.
+
+Examples:
+
+| Desired | Raw @ 24fps | H3-aligned | Model duration |
+| ---: | ---: | ---: | ---: |
+| 5.0s | 120 | 124 | 5.167s |
+| 7.0s | 168 | 175 | 7.292s |
+| 8.0s | 192 | 192 | 8.000s |
+| 10.0s | 240 | 243 | 10.125s |
+| 15.0s | 360 | 362 | 15.083s |
+
+The app currently clamps dynamic requests to the commonly documented/trained local range of roughly **124–362 frames**.
+
+This is why thinking in exact round-number seconds can be misleading. The Diagnostics table shows both the aligned requested timing and the actual encoded media timing from `ffprobe`.
+
+---
+
+## Setup fields
+
+### Temporal control
+
+- **Initial buffer (seconds)** — how much completed video is generated before playback starts.
+- **Target buffer (seconds)** — how much unplayed video the controller tries to maintain.
+- **Idle desired duration** — target duration for silent/background segments.
+- **Chat desired duration** — target duration for LLM-directed response segments.
+- **Reset desired duration** — target duration for the convergence-to-canonical segment.
+- **Reset after chained clips** — after this many free-running chained clips, the next clip is generated as `current final frame → canonical image`. Set `0` to disable.
+
+### Prompt mappings
+
+- **H3 prompt / FL node ID** — H3 conditioning node containing the prompt input.
+- **H3 prompt input** — usually `prompt` on the native H3 node.
+- **LLM director node ID / input** — used when the app writes directly into the LLM.
+- **LLM input trace node ID** — optional but recommended for exact LLM latency.
+- **LLM output trace node ID** — recommended for raw LLM response capture.
+- **Final H3 prompt trace node ID** — recommended for exact final H3 input capture.
+
+If an LLM input trace node is configured, the app writes the director prompt into that trace node instead of directly into the LLM; wire the trace output to the LLM input.
+
+### FL mappings
+
+- **First-frame Load Image node ID / filename input** — app changes this filename every generation.
+- **Last-frame Load Image node ID / filename input** — app keeps this pointed at the canonical image.
+- **FL target node ID** — node containing optional `last_frame`; defaults to the H3 prompt node.
+- **Optional last-frame input** — usually `last_frame`.
+- **Frame-count node ID / input** — where the app writes aligned frame length; usually the H3 node's `length` input.
+
+### Output mappings
+
+- **Output video node ID** — `Save Video`, VHS combine, or equivalent output node.
+- **Preferred output key** — usually `videos`; the app also falls back to scanning other file-record arrays.
+
+Keep the output/saver node. The controller needs its normal ComfyUI history file record to play, probe, and extract the continuity frame.
+
+---
 
 ## Runtime behavior
 
-When you press **Start / Prefill**:
+When **Start / Prefill** is pressed:
 
-1. The app generates the configured number of initial idle clips.
-2. Playback begins once the initial buffer is complete.
-3. The controller keeps generating clips one at a time until the target buffer is satisfied.
-4. A chat message is placed in a queue.
-5. The next generation slot consumes the oldest pending chat message and uses the chat-response template.
-6. Playback reaches that newly generated segment naturally.
+1. The canonical image becomes the first continuity frame.
+2. Idle clips generate sequentially until the configured initial-buffer seconds are satisfied.
+3. Each completed clip is probed and its final frame is extracted into:
 
-So the interaction is intentionally **buffered rather than instant**. The UI stays smooth even when generation is slower than real-time, as long as average generation throughput remains ahead of playback consumption.
+```text
+ComfyUI/input/live_h3_chat/continuity/
+```
 
-## H3 / RAVEN note
+4. That extracted image becomes the next clip's first frame.
+5. Playback starts.
+6. Background generation continues until the target-buffer seconds are satisfied.
+7. After the configured chain depth, a reset segment uses the current final frame as first frame and canonical image as last frame.
+8. After that reset completes, chaining continues from the **actual generated final frame** of the reset clip.
 
-The current `ComfyUI-MiniMax-H3-RAVEN-Streaming` project provides streaming T2VA generation and a ready-made API workflow. Its documented streaming path currently uses the official H3 conditioning node in T2VA form, with no first/last frame connected. That makes it useful for testing the rolling architecture, but not necessarily the best first graph for strict reference-image identity/continuity. The Live H3 Chat app therefore does not depend on RAVEN and does not hard-code its node IDs.
+### Chat preemption
 
-For a reference-image presenter, use an H3 image/reference-conditioned workflow that you have verified locally, then map its prompt/image/output inputs here. Later we can add a dedicated RAVEN adapter once we decide exactly how we want to handle cross-segment visual state.
+FL continuity means generated future clips cannot safely be reordered. If the generated chain is:
 
-Reference implementation: https://github.com/YanzuoLu/ComfyUI-MiniMax-H3-RAVEN-Streaming
+```text
+A → B → C
+```
 
-## Current MVP limitations
+we cannot insert newly generated D between A and B if D was conditioned from C.
 
-- Chat text is currently injected directly into the video prompt. There is no separate LLM/dialogue-writer yet.
-- Continuity currently comes from your reference image + prompt + model/workflow. The app does not yet extract the previous clip's final frame and feed it into the next clip.
-- Generation is single-flight: one ComfyUI segment is queued at a time by this app.
-- If generation falls behind playback, the player waits for the next completed segment and reports a buffer underrun.
-- Browser autoplay starts muted. Click **Unmute** once playback begins.
-- The app expects the selected output node to expose a normal ComfyUI file record (`filename`, `subfolder`, `type`) in prompt history.
+Therefore when chat arrives, the controller:
 
-## Next steps
+1. keeps the currently playing segment
+2. discards unplayed future idle segments
+3. returns the continuity cursor to the current segment's known final frame
+4. allows an already-running stale idle job to finish but discards its result
+5. generates the chat response from the correct continuity frame
+6. resumes forward chaining
 
-The architecture intentionally leaves room for:
+During early development this can cause a buffer underrun if chat generation is slower than the remaining playing time. That is intentional: preserving correct visual causality is more important than silently showing a discontinuous clip.
 
-1. previous-frame / previous-clip conditioning
-2. a dedicated MiniMax H3 RAVEN adapter
-3. OpenAI-compatible or local-LLM dialogue generation
-4. explicit spoken-script generation + TTS/audio-conditioned video
-5. transition/crossfade logic
-6. generation-speed telemetry and adaptive buffer sizing
-7. multiple characters / scene states
-8. reusable scene presets
+---
+
+## Prompting guidance
+
+For idle clips, avoid asking H3 to invent dialogue. Keep them visual and silent:
+
+```text
+The presenter quietly reviews the papers, glances toward the monitor, blinks, breathes naturally, and remains seated. No spoken dialogue occurs.
+```
+
+For chat clips, let the LLM write literal spoken dialogue, then send that complete prompt to H3.
+
+The director template supports these runtime variables in addition to the existing scene/chat variables:
+
+```text
+{segment_seconds}
+{segment_frames}
+{is_reset}
+{reset_instruction}
+```
+
+On reset clips the app also appends an explicit instruction telling the director/H3 to make one continuous shot converge to the supplied final frame.
+
+---
+
+## Current implementation notes
+
+- Generation is single-flight: one ComfyUI generation at a time from this controller.
+- Playback uses ordinary ComfyUI `/prompt`, `/history`, and `/view` endpoints.
+- Media URLs are cache-busted so saver nodes that reuse a filename do not make the browser appear to replay the first clip forever.
+- Final-frame extraction currently happens from the encoded saved video via `ffmpeg`. A future optimization could capture the last decoded frame directly inside the Comfy graph and avoid the encode/decode round trip.
+- Extracted continuity PNGs currently accumulate in `input/live_h3_chat/continuity/`; cleanup/retention policy is a future quality-of-life improvement.
+- Browser autoplay begins muted; click **Unmute** once playback starts.
 
 ## Repository structure
 
 ```text
 ComfyUI-LiveStream-H3-Chat/
 ├── __init__.py
-├── server.py
+├── nodes.py                 # Live H3 Trace Text
+├── server.py                # app routes + ffprobe/ffmpeg helpers
 ├── web/
 │   ├── index.html
-│   ├── app.js
+│   ├── app.js               # original MVP shell
+│   ├── director-patch.js    # FL runtime / diagnostics v2
 │   └── styles.css
-└── data/                 # created at runtime
+└── data/                    # created at runtime
     ├── settings.json
     └── workflow.json
 ```
