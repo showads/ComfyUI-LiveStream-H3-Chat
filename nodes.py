@@ -8,6 +8,11 @@ class LiveH3TraceText:
     Put one before the LLM, one directly after it, and optionally one immediately
     before the H3 prompt input. The standalone app can read these records from
     ComfyUI history to show exact prompts and estimate per-stage latency.
+
+    This is intentionally *not* an OUTPUT_NODE. ComfyUI records UI data for
+    executed intermediate nodes in history, while leaving this node intermediate
+    allows idle clips that directly override the H3 prompt to skip the entire LLM
+    branch instead of forcing it to run just for diagnostics.
     """
 
     @classmethod
@@ -22,12 +27,9 @@ class LiveH3TraceText:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("text",)
     FUNCTION = "trace"
-    OUTPUT_NODE = True
     CATEGORY = "Live H3 Chat"
 
     def trace(self, text, label):
-        # Some text nodes can emit a one-item list; keep the pass-through useful
-        # while normalizing the diagnostic payload to a plain string.
         if isinstance(text, list):
             value = "\n".join(str(x) for x in text)
         else:
