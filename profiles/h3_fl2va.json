@@ -1,0 +1,66 @@
+{
+  "id": "h3_fl2va_v3",
+  "version": 1,
+  "display_name": "MiniMax H3 FL2VA Continuous Scene",
+  "description": "Semantic workflow contract for Live H3 Chat. Roles are discovered structurally and stored as selectors rather than numeric node IDs.",
+  "required_roles": [
+    "h3",
+    "first_frame_loader",
+    "last_frame_loader",
+    "director_input_trace",
+    "llm_output_trace",
+    "video_output"
+  ],
+  "optional_roles": ["final_prompt_trace"],
+  "role_rules": {
+    "h3": {
+      "class_type": "MiniMaxH3ImageToVideo",
+      "required_inputs": ["prompt", "length", "first_frame", "last_frame"]
+    },
+    "first_frame_loader": {
+      "from_role": "h3",
+      "connection_input": "first_frame"
+    },
+    "last_frame_loader": {
+      "from_role": "h3",
+      "connection_input": "last_frame"
+    },
+    "director_input_trace": {
+      "class_type": "LiveH3TraceText",
+      "label": "director_input"
+    },
+    "llm_output_trace": {
+      "class_type": "LiveH3TraceText",
+      "label": "llm_output"
+    },
+    "final_prompt_trace": {
+      "class_type": "LiveH3TraceText",
+      "label": "final_h3_prompt",
+      "optional": true
+    },
+    "video_output": {
+      "terminal": true,
+      "class_or_title_regex": "save.*video|video.*save|vhs.*video.*combine|video.*combine"
+    }
+  },
+  "dynamic_inputs": {
+    "h3_prompt": "prompt",
+    "h3_length": "length",
+    "h3_first_frame": "first_frame",
+    "h3_last_frame": "last_frame",
+    "image_filename": "image",
+    "trace_text": "text",
+    "trace_label": "label"
+  },
+  "defaults": {
+    "fps": 24,
+    "idle_seconds": 5.0,
+    "chat_seconds": 7.3,
+    "reset_seconds": 5.0,
+    "initial_buffer_seconds": 10,
+    "target_buffer_seconds": 12,
+    "latency_quality": 65,
+    "smart_cancel": true,
+    "adaptive_governor": true
+  }
+}
