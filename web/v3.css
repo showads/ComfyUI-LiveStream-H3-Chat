@@ -1,0 +1,25 @@
+/* v3 workflow contract / governor / showrunner additions */
+.v3-card {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0d1116aa;
+}
+.v3-card .section-head { margin-bottom: 12px; }
+.check-field { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; }
+.check-field > span { margin: 0; }
+.check-field input[type="checkbox"] { width: auto; justify-self: end; }
+.inline-check { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; margin-top: 10px; }
+.inline-check input { width: auto; }
+.contract-status { padding: 10px 12px; border-radius: 9px; border: 1px solid var(--line); font-size: 12px; }
+.contract-status.ok { border-color: #67d69b66; color: #98e6b9; background: #67d69b0c; }
+.contract-status.warn { border-color: #ffce6b66; color: #ffda8c; background: #ffce6b0c; }
+.contract-status.error { border-color: #ff747466; color: #ffabab; background: #ff74740c; }
+.workflow-raw-hidden { display: none !important; }
+#latencyQuality { padding: 0; }
+#latencyQualityValue { display: inline-block; margin-top: 5px; color: var(--accent-2); font: 12px ui-monospace, monospace; }
+.workflow-contract-card .controls-row { margin-top: 0; }
+@media (max-width: 640px) {
+  .check-field { grid-template-columns: 1fr auto; }
+}
