@@ -11,6 +11,7 @@ import folder_paths
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
 WEB_DIR = ROOT / "web"
+PROFILE_FILE = ROOT / "profiles" / "h3_fl2va.json"
 SETTINGS_FILE = DATA_DIR / "settings.json"
 WORKFLOW_FILE = DATA_DIR / "workflow.json"
 
@@ -119,13 +120,25 @@ def register_routes():
 
     @routes.get("/live-h3-chat/director-patch.js")
     async def live_h3_chat_director_js(_request):
-        runtime = (WEB_DIR / "director-patch.js").read_text(encoding="utf-8")
-        fixes = (WEB_DIR / "runtime-fixes.js").read_text(encoding="utf-8")
-        return web.Response(text=f"{runtime}\n\n{fixes}\n", content_type="application/javascript")
+        chunks = []
+        for name in ("director-patch.js", "runtime-fixes.js", "runtime-v3.js"):
+            path = WEB_DIR / name
+            if path.exists():
+                chunks.append(path.read_text(encoding="utf-8"))
+        return web.Response(text="\n\n".join(chunks) + "\n", content_type="application/javascript")
 
     @routes.get("/live-h3-chat/styles.css")
     async def live_h3_chat_css(_request):
-        return web.FileResponse(WEB_DIR / "styles.css")
+        chunks = []
+        for name in ("styles.css", "v3.css"):
+            path = WEB_DIR / name
+            if path.exists():
+                chunks.append(path.read_text(encoding="utf-8"))
+        return web.Response(text="\n\n".join(chunks) + "\n", content_type="text/css")
+
+    @routes.get("/live-h3-chat/api/workflow-profile")
+    async def live_h3_chat_workflow_profile(_request):
+        return _json_response(_load_json(PROFILE_FILE, {}))
 
     @routes.get("/live-h3-chat/api/config")
     async def live_h3_chat_config(_request):
@@ -205,10 +218,6 @@ def register_routes():
             target_name = f"last_{int(time.time() * 1000)}.png"
             target = target_dir / target_name
 
-            # Decode only the final second of the clip, reverse those decoded
-            # video frames, then take the first reversed frame. This produces the
-            # actual terminal decoded frame instead of estimating its timestamp
-            # from container duration (which can otherwise land one frame early).
             cmd = [
                 "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
                 "-sseof", "-1.0", "-i", str(source),
