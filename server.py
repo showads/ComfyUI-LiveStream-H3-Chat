@@ -121,7 +121,7 @@ def register_routes():
     @routes.get("/live-h3-chat/director-patch.js")
     async def live_h3_chat_director_js(_request):
         chunks = []
-        for name in ("director-patch.js", "runtime-fixes.js", "runtime-v3.js", "runtime-v5.js", "runtime-v6.js"):
+        for name in ("director-patch.js", "runtime-fixes.js", "runtime-v3.js", "runtime-v5.js", "runtime-v6.js", "runtime-v7.js"):
             path = WEB_DIR / name
             if path.exists():
                 chunks.append(path.read_text(encoding="utf-8"))
@@ -158,6 +158,19 @@ def register_routes():
             SETTINGS_FILE.write_text(json.dumps(settings, indent=2), encoding="utf-8")
             WORKFLOW_FILE.write_text(json.dumps(workflow, indent=2), encoding="utf-8")
             return _json_response({"ok": True})
+        except Exception as exc:
+            return _json_response({"error": str(exc)}, 500)
+
+    @routes.get("/live-h3-chat/api/loras")
+    async def live_h3_chat_loras(_request):
+        try:
+            names = []
+            for value in folder_paths.get_filename_list("loras"):
+                name = str(value).replace("\\", "/")
+                if name.lower().startswith("mmh3/"):
+                    names.append(name)
+            names.sort(key=str.lower)
+            return _json_response({"ok": True, "root": "models/loras/mmh3/", "loras": names})
         except Exception as exc:
             return _json_response({"error": str(exc)}, 500)
 
