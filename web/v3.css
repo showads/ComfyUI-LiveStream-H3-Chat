@@ -20,6 +20,40 @@
 #latencyQuality { padding: 0; }
 #latencyQualityValue { display: inline-block; margin-top: 5px; color: var(--accent-2); font: 12px ui-monospace, monospace; }
 .workflow-contract-card .controls-row { margin-top: 0; }
+
+/* v7 live quality/throughput controls */
+.live-render-card { background: #10161d; }
+.live-render-help { color: var(--muted); margin: 10px 0 0; }
+#liveRenderControls { margin-top: 12px; }
+.live-knob-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.live-knob { display: block; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); }
+.live-knob > span { display: block; min-height: 30px; }
+.live-knob input { margin-top: 3px; }
+.live-knob small { display: block; margin-top: 5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live-knob.unavailable strong { display: block; color: var(--muted); font-size: 12px; font-weight: 500; }
+.live-lora-details { margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; background: #0a0e13; overflow: hidden; }
+.live-lora-details > summary { cursor: pointer; padding: 10px 12px; color: var(--accent-2); font-weight: 700; }
+#liveLoraRows { border-top: 1px solid var(--line); }
+.live-lora-node + .live-lora-node { border-top: 1px solid var(--line); }
+.live-lora-node-title { padding: 8px 10px 4px; color: var(--muted); font: 11px ui-monospace, monospace; }
+.live-lora-row { display: grid; grid-template-columns: 110px minmax(220px, 1fr) 110px 110px; gap: 8px; align-items: end; padding: 8px 10px 10px; }
+.live-lora-toggle { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.live-lora-toggle input { width: auto; margin: 0; }
+.live-lora-toggle span { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-lora-row select { width: 100%; color: var(--text); background: #0d1116; border: 1px solid var(--line); border-radius: 9px; padding: 10px 11px; }
+.live-lora-strength > span { margin-bottom: 4px; }
+
+@media (max-width: 1180px) {
+  .live-knob-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .live-lora-row { grid-template-columns: 100px minmax(180px, 1fr) 100px 100px; }
+}
+
+@media (max-width: 760px) {
+  .live-knob-grid { grid-template-columns: 1fr; }
+  .live-lora-row { grid-template-columns: 1fr 1fr; }
+  .live-lora-row select { grid-column: 1 / -1; }
+}
+
 @media (max-width: 640px) {
   .check-field { grid-template-columns: 1fr auto; }
 }
