@@ -130,8 +130,6 @@ function v6ParseShowrunnerJson(raw) {
       parse_error: false,
     };
   } catch (_) {
-    // A raw prose response is still more useful than losing the run entirely.
-    // Duration falls back to the existing chat plan.
     return {
       suggested_seconds: NaN,
       detailed_description: text,
@@ -211,7 +209,10 @@ runShowrunner = async function (intent, token) {
   if (durationEnabled && Number.isFinite(parsed.suggested_seconds)) {
     const bounds = v6DurationBounds();
     const requested = v6Clamp(parsed.suggested_seconds, bounds.hardMin, bounds.hardMax);
-    intent.plan = h3FramePlan(requested);
+    const chosenPlan = h3FramePlan(requested);
+    // Mutate the existing object rather than replacing it: diagnostics already
+    // holds the same plan reference by the time the director preflight runs.
+    Object.assign(intent.plan, chosenPlan);
   }
 
   return {
@@ -231,9 +232,6 @@ function v6StripDetailedHeading(text) {
 
 function v6SplitStableScaffold(basePrompt) {
   let base = String(basePrompt || '').trim();
-
-  // If an older hand-written base accidentally contains detailed_description,
-  // discard that transient body but keep the stable sound/music suffix.
   const detailMatch = /(?:^|\n)\s*detailed_description\s*:?\s*(?:\n|$)/i.exec(base);
   const soundMatch = /(?:^|\n)\s*overall_soundscape\s*:?\s*(?:\n|$)/i.exec(base);
 
@@ -259,11 +257,10 @@ function v6SplitStableScaffold(basePrompt) {
 function v6AssembleFullReferencePrompt(basePrompt, detailedDescription) {
   const { prefix, suffix } = v6SplitStableScaffold(basePrompt);
   const body = v6StripDetailedHeading(detailedDescription);
-  return [
-    prefix,
-    `detailed_description\n${body}`,
-    suffix,
-  ].filter((x) => String(x || '').trim()).join('\n\n').trim();
+  return [prefix, `detailed_description\n${body}`, suffix]
+    .filter((x) => String(x || '').trim())
+    .join('\n\n')
+    .trim();
 }
 
 formatDirectedPrompt = function (_intent, showrunner) {
@@ -273,9 +270,6 @@ formatDirectedPrompt = function (_intent, showrunner) {
   );
 };
 
-// Normal idle remains LLM-free, but it now uses the same correct field ordering
-// and writes an actual detailed_description instead of tacking prose on after the
-// complete base prompt.
 directIdlePrompt = function (intent) {
   const beat = String(intent.beat || 'maintain a calm attentive posture with subtle natural breathing and blinking').trim();
   const continuity = intent.isReset
@@ -286,9 +280,6 @@ directIdlePrompt = function (intent) {
 };
 
 setTimeout(() => {
-  // -------------------------------------------------------------------------
-  // Setup UI / migration
-  // -------------------------------------------------------------------------
   const showrunnerLabel = $('showrunnerTemplate')?.closest('label')?.querySelector('span');
   if (showrunnerLabel) showrunnerLabel.textContent = 'Showrunner prompt → duration + complete detailed_description JSON';
 
@@ -346,7 +337,6 @@ setTimeout(() => {
     if ($('showrunnerTemplate')) $('showrunnerTemplate').value = migrated.showrunnerTemplate;
   };
 
-  // Current page may already have been populated by prior runtime layers.
   if (!$('showrunnerTemplate')?.value || v6LooksLikeLegacyShowrunner($('showrunnerTemplate')?.value)) {
     if ($('showrunnerTemplate')) $('showrunnerTemplate').value = V6_DEFAULT_SHOWRUNNER_TEMPLATE;
     state.settings.showrunnerTemplate = V6_DEFAULT_SHOWRUNNER_TEMPLATE;
