@@ -121,7 +121,7 @@ def register_routes():
     @routes.get("/live-h3-chat/director-patch.js")
     async def live_h3_chat_director_js(_request):
         chunks = []
-        for name in ("director-patch.js", "runtime-fixes.js", "runtime-v3.js", "runtime-v5.js"):
+        for name in ("director-patch.js", "runtime-fixes.js", "runtime-v3.js", "runtime-v5.js", "runtime-v6.js"):
             path = WEB_DIR / name
             if path.exists():
                 chunks.append(path.read_text(encoding="utf-8"))
